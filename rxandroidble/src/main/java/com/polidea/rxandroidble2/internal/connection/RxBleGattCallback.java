@@ -197,6 +197,8 @@ public class RxBleGattCallback {
 
         @Override
         public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+            // Fix status
+            status = status == 4 ?  0 : status;
             LoggerUtil.logCallback("onMtuChanged", gatt, status, mtu);
             nativeCallbackDispatcher.notifyNativeMtuChangedCallback(gatt, mtu, status);
             super.onMtuChanged(gatt, mtu, status);

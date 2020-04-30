@@ -9,7 +9,8 @@ buildscript {
 
 apply plugin: 'java'
 apply plugin: 'com.github.johnrengelman.shadow'
-apply from: rootProject.file('gradle/gradle-mvn-push.gradle')
+//apply from: rootProject.file('gradle/gradle-mvn-push.gradle')
+apply from: "$rootDir/gradle/artifacts.gradle"
 
 def buildSrcDir = '../gradle'
 apply from: "${buildSrcDir}/shadow.gradle"

@@ -1,0 +1,107 @@
+// origin： https://raw.githubusercontent.com/ReactiveX/RxAndroid
+apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: 'com.jfrog.bintray'
+apply plugin: 'com.jfrog.artifactory'
+
+
+if (project.plugins.hasPlugin('com.android.library')) {
+    android.libraryVariants.all { variant ->
+
+        Task javadocTask = task("generate${variant.name.capitalize()}Javadoc", type: Javadoc) {
+            group = 'artifact'
+            description "Generates Javadoc for $variant.name"
+
+            // Source files from the variant
+            source = variant.javaCompiler.source
+
+            // Classpath from the variant + android.jar
+            String androidJar = "${android.sdkDirectory}/platforms/${android.compileSdkVersion}/android.jar"
+            classpath = variant.javaCompiler.classpath + files(androidJar)
+
+            // The Android online reference doesn't include package-list, so we have to use the local one
+            String packageListRef = "${android.sdkDirectory}/docs/reference/"
+            options.linksOffline 'http://d.android.com/reference/', packageListRef
+
+            // Additional links for any RxJava references
+            options.links 'http://reactivex.io/RxJava/javadoc/'
+
+            // Exclude generated files
+            exclude '**/BuildConfig.java'
+            exclude '**/R.java'
+
+            // Output to a unique javadoc folder per variant
+            destinationDir = new File(project.docsDir, "javadoc-$variant.name")
+
+            if (JavaVersion.current().isJava8Compatible()) {
+                options.addStringOption('Xdoclint:none', '-quiet')
+            }
+        }
+
+        // For official releases, don't prefix the name so the artifact is published correctly
+        // (Can't seem to modify it for publishing, for whatever reason...)
+        String classifierPrefix = (variant.name == 'release') ? '' : "$variant.name-"
+
+        Task javadocJarTask = task("generate${variant.name.capitalize()}JavadocJar", type: Jar, dependsOn: javadocTask) {
+            group = 'artifact'
+            description = "Generates Javadoc jar for $variant.name"
+
+            classifier = "${classifierPrefix}javadoc"
+            from javadocTask.destinationDir
+        }
+
+        Task sourcesJarTask = task("generate${variant.name.capitalize()}SourcesJar", type: Jar) {
+            group = 'artifact'
+            description = "Generates sources jar for $variant.name"
+
+            classifier = "${classifierPrefix}sources"
+            from android.sourceSets.main.java.srcDirs
+        }
+
+        if (variant.name == 'release') {
+            // There's a lot of "magic" around the archives configuration; easier
+            // just to embrace it rather than try to configure around it
+            artifacts {
+                archives sourcesJarTask, javadocJarTask
+            }
+        }
+        else {
+            // Create a configuration we can publish from for each variant
+            String configurationName = "archives${variant.name.capitalize()}"
+            configurations.create(configurationName)
+            artifacts.add configurationName, sourcesJarTask
+            artifacts.add configurationName, javadocJarTask
+        }
+    }
+}
+group = GROUP
+boolean isSnapshotBuild = SNAPSHOT.toBoolean()
+version = isSnapshotBuild ? "$VERSION_NAME-SNAPSHOT" : VERSION_NAME
+println("$POM_NAME version=$version")
+// Configure android-maven-gradle-plugin
+install {
+    repositories.mavenInstaller.pom.project {
+        name POM_NAME
+        description POM_DESCRIPTION
+        packaging POM_PACKAGING
+        url POM_URL
+    }
+}
+
+// Configure artifactory (for publishing snapshots)
+//
+// Based on NebulaOJOPublishingPlugin (from nebula-bintray-plugin)
+artifactory {
+    contextUrl = 'http://172.16.2.6:8081/artifactory'
+    publish {
+        repository {
+            repoKey = 'gradle-release-local'
+            username = "${artifactory_user}"
+            password = "${artifactory_password}"
+        }
+
+        defaults {
+            publishConfigs('archives')
+            publishIvy = false
+        }
+    }
+}
